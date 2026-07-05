@@ -125,6 +125,12 @@ found:
   p->pid = allocpid();
   p->state = USED;
 
+  // code for assignment 3 will be below
+
+  p->bufferpage = 0;
+  p->msgenrolled = 0;
+
+
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0) {
     freeproc(p);
@@ -761,17 +767,67 @@ void printpgtable(pagetable_t pagetable) {
 
 //---------------------- Implementations for ast 3 ------------------------
 
-void msgenroll(void)
-{
-  //TODO: Please implement here
+void msgenroll(void){
+
+    struct proc *p = myproc();
+
+    if (p->msgenrolled){return;}
+
+    p->bufferpage = kalloc();  // one page buffer
+
+    if (p->bufferpage == 0){return;} // double checking
+
+    memset(p->bufferpage, 0, PGSIZE); // clear page
+
+    uint64 addr = PGROUNDUP(p->sz);  // page @ end of line
+
+    if (mappages(p->pagetable, addr, PGSIZE,
+                 (uint64)p->bufferpage,    // added to the table
+                 PTE_R | PTE_W | PTE_U) != 0){
+
+	kfree(p->bufferpage);
+	p->bufferpage = 0;
+        return;
+    }
+
+    p->sz = addr + PGSIZE;
+    p->msgenrolled = 1;
 }
 
-void msgsend(void* data, int size, int offset, int recipient)
-{
-  //TODO: Please implement here
+void msgsend(void* data, int size, int offset, int recipient){
+
+  struct proc *sender = myproc();
+  struct proc *p;
+
+  if(offset + size > PGSIZE){return;} // message fits on page
+
+  uint64 src = walkaddr(sender->pagetable, (uint64)data);
+  if (src ==0){return;}
+  src = src + ((uint64)data%PGSIZE);
+
+  for(p = proc; p < &proc[NPROC]; p++){ // scanning all processes
+    if(p->pid == recipient && p->msgenrolled){
+      memmove((char *)p->bufferpage + offset, (void*)src, size); // copy
+      return;
+    }
+  }
 }
 
-void msgread(void* data_out, int size, int offset)
-{
-  //TODO: Please implement here
+void msgread(void* data_out, int size, int offset){
+
+  struct proc *p = myproc();
+
+  if(!p->msgenrolled){return;} // stored
+
+  if(offset + size > PGSIZE){return;} // boundard
+
+  uint64 dst = walkaddr(p-> pagetable, (uint64)data_out);
+
+  if(dst == 0){return;}
+
+  dst = dst + ((uint64)data_out%PGSIZE);
+
+  // copy over to next
+  memmove((void*)dst, (char *)p->bufferpage + offset, size);
+
 }

@@ -103,4 +103,7 @@ struct proc {
   char name[16];               // Process name (debugging)
 
   void* bufferpage;
+
+  // Code for assigments 3 adding the ms enroll
+  int msgenrolled;
 };
